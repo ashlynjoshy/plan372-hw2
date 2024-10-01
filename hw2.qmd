@@ -1,0 +1,14 @@
+---
+title: "PLAN 372 HW 2"
+author: "Ashlyn Joshy"
+format: html
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+library(lubridate)
+#need read csv function as well
+```
+
+Load the data from CSV. 
