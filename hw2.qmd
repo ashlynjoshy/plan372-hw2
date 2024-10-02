@@ -8,7 +8,257 @@ editor: visual
 ```{r}
 library(tidyverse)
 library(lubridate)
-#need read csv function as well
+library(ggthemes)
 ```
 
-Load the data from CSV. 
+
+```{r}
+restaurant = read_csv("restaurant_inspections.csv")
+restaurant
+```
+
+The restaurant dataset contains records of the most recent health inspection for food-service establishments in Wake County. County health officials are curious to gain a better understanding of the overall picture of food safety in the county, in order to better target enforcement efforts, and have asked you use this dataset to answer the following questions:
+
+1. Visualize the overall distribution of inspection scores using a histogram. [1 point]
+geom_histogram
+```{r}
+ggplot(restaurant, aes(x=SCORE)) +
+  geom_histogram()
+```
+
+2. Some restaurants have been in business much longer than others. Is there any trend in terms of how highly older vs. newer restaurants score on their inspections? [0.5 points]
+
+ANSWER: Older restaurants seem to have overall high scores, while newer restaurants have a wider range in their scores. Most of the data is similar, but there is one outlier. One restaurant has a score of 0, which I assume means it completely failed inspection. Overall, both older and newer restaurants have high inspection scores, with most scores being in the 90s. 
+
+```{r}
+#Filters the table so that none of the restaurants have "NA" as an open date
+restaurant_2 = restaurant |>
+  filter(!is.na(RESTAURANTOPENDATE))
+
+#Converts restaurant open dates to a date format 
+restaurant_2$RESTAURANTOPENDATE = ymd_hms(restaurant_2$RESTAURANTOPENDATE, tz="UTC")
+
+#Display new table
+restaurant_2
+```
+
+
+```{r}
+#Plot the resulting table 
+ggplot(restaurant_2, aes(x=RESTAURANTOPENDATE, y=SCORE)) +
+  geom_point() + 
+  ylim(75, 100)
+  #Zooming in excludes one point with a value of 0 but allows us to see details better 
+```
+
+
+3. Wake County is the most populous county in North Carolina, and there are many cities in it. Do the inspection scores vary by city? Note that the city column contains some differently spelled city names; make sure to clean those up so that there is only one estimated value per city. The recode function that we used for creating a weekend/weekday variable in the SFpark exercise will be useful here, and you may also be interested in the str_to_upper function. [1 point]
+
+ANSWER: Yes, the inspection scores vary slightly by city, but all of the cities have an average score in the 90s. 
+
+```{r}
+#Lists out all of the different unique values for the city column
+unique(restaurant$CITY)
+```
+
+```{r}
+#Removes "NA" data from the cities column
+restaurant_3 = restaurant |>
+  filter(!is.na(CITY)) 
+
+#Verifies that NA data has been removed
+unique(restaurant_3$CITY)
+```
+
+```{r}
+#Unifies all of the data and makes it all uppercase
+restaurant_3$CITY = str_to_upper(restaurant_3$CITY)
+sort(unique(restaurant_3$CITY))
+```
+
+```{r}
+#Recodes the misspelled data
+restaurant_3$CITY = recode(restaurant_3$CITY, 
+                         "FUQUAY-VARINA"="FUQUAY VARINA", 
+                         "HOLLY SPRING" ="HOLLY SPRINGS", 
+                         "MORRISVILE"="MORRISVILLE", 
+                         "RTP" ="RESEARCH TRIANGLE PARK")
+sort(unique(restaurant_3$CITY))
+```
+
+```{r}
+#Finds the average restaurant score for each city. 
+scores_by_city = restaurant_3 |> 
+  group_by(CITY) |> 
+  summarize(SCORE=mean(SCORE)) |>
+  ungroup()
+
+scores_by_city
+```
+  
+4. Wake County employs a whole team of inspectors. It is possible that some inspectors may be more thorough than others. Do inspection scores vary by inspector? [0.5 points]
+
+ANSWER: Yes, inspection score slightly vary by inspector because the average score of each inspector is different. However, this difference in averages is very small, with all but one inspector having an average score in the high 90s. 
+
+```{r}
+#Finds the average score for each inspector. 
+scores_by_inspector = restaurant |> 
+  group_by(INSPECTOR) |> 
+  summarize(SCORE=mean(SCORE)) |>
+  ungroup()
+
+scores_by_inspector
+
+ggplot(scores_by_inspector, aes(x=INSPECTOR, y=SCORE)) +
+  geom_point()
+```
+  
+5. It is possible that some extreme results from the previous questions are due to small sample sizes in a particular city, for a particular inspector, or in a particular time period. Look at the sample sizes in each of your groups. Do you think this is an explanation for the results you came to above? [0.5 point]
+
+ANSWER: The sample sizes vary for all three aspects. For city, there are several cities with only a handful of restaurants (in the database). For inspector, most have between 100-200 restaurants they've inspected, but some have much fewer. And for date, there are very few inspection records in 2019 and early 2020. All of these factors can skew the results. 
+
+```{r}
+#In each city, find the number of restaurants 
+restaurant |> 
+  group_by(CITY) |>
+  summarize(HSISID=length(HSISID)) |>
+  ungroup()
+```
+
+```{r}
+#For each inspector, find the number of restaurants they reviewed 
+restaurant |> 
+  group_by(INSPECTOR) |>
+  summarize(HSISID=length(HSISID)) |>
+  ungroup()
+```
+
+```{r}
+#Group dates by month
+restaurant$DATE_MONTH = floor_date(restaurant$DATE_, unit="month")
+
+#For each month, how many restaurants had inspections 
+restaurant |> 
+  group_by(DATE_MONTH) |>
+  summarize(HSISID=length(HSISID)) |>
+  ungroup()
+```
+
+
+
+6. The data file contains records for many types of food-service facility (e.g. restaurants, food trucks, etc.). Are the scores for restaurants higher than other types of facility? [0.5 point]
+
+ANSWER: No, scores for restaurants are not higher than scores for other types of facilities. All facilities, on average, had scores in the 90s. 
+
+```{r}
+#This table counts the number of entities for each facility type. 
+restaurant |> 
+  group_by(FACILITYTYPE) |>
+  summarize(HSISID=length(HSISID)) |>
+  ungroup()
+
+#This table finds the average inspection score for each facility type. 
+restaurant |> 
+  group_by(FACILITYTYPE) |>
+  summarize(SCORE=mean(SCORE)) |>
+  ungroup()
+```
+
+7. Since restaurants are where the general public is most likely to interact with the food-service system, Wake County Public Health is particularly interested in sanitation in restaurants. Repeat the analyses above (1-5) for restaurants specifically. [3 points]
+```{r}
+#Filters the dataset to only include facility type Restaurant. 
+restaurants_only = restaurant |> filter(FACILITYTYPE=="Restaurant")
+restaurants_only
+
+#Ensures there is only 1 facility type. 
+unique(restaurants_only$FACILITYTYPE)
+```
+
+
+Visualize the overall distribution of inspection scores using a histogram
+ANSWER: With one exception, the distribution of inspection scores ranges from the high 80s to 100. 
+
+```{r}
+ggplot(restaurants_only, aes(x=SCORE)) +
+  geom_histogram()
+```
+
+Trend in terms of how highly older vs. newer restaurants score on their inspections
+ANSWER: Overall, most restaurants had scores above 80. Older restaurants tended to have mostly higher scores, while newer restaurants had a greater range in scores, with some being high and some being lower. 
+
+```{r}
+#Filters out NA values for restaurant open date 
+restaurants_only_2 = restaurants_only |>
+  filter(!is.na(RESTAURANTOPENDATE))  
+```
+
+```{r}
+#Converts restaurant open date from characters to a date format 
+restaurants_only_2$RESTAURANTOPENDATE = ymd_hms(restaurants_only_2$RESTAURANTOPENDATE, tz="UTC")
+restaurants_only_2
+```
+
+```{r}
+#Plots score by the restaurants open date 
+ggplot(restaurants_only_2, aes(x=RESTAURANTOPENDATE, y=SCORE)) +
+  geom_point() + 
+  ylim(75, 100)
+```
+
+Do the inspection scores vary by city?
+ANSWER: Yes, but only very slightly. All of the average inspection scores are in the 90s. 
+```{r}
+#Finds average score of restaurants grouped by city 
+restaurant_scores_by_city = restaurants_only |> 
+  group_by(CITY) |> 
+  summarize(SCORE=mean(SCORE)) |>
+  ungroup()
+
+restaurant_scores_by_city
+```
+
+Do inspection scores vary by inspector?
+ANSWER: Yes, inspection scores do vary by inspector. 
+```{r}
+#Finds average inspection score grouped by inspector
+restaurant_scores_by_inspector = restaurants_only |> 
+  group_by(INSPECTOR) |> 
+  summarize(SCORE=mean(SCORE)) |>
+  ungroup()
+
+restaurant_scores_by_inspector
+
+ggplot(restaurant_scores_by_inspector, aes(x=INSPECTOR, y=SCORE)) +
+  geom_point()
+```
+
+It is possible that some extreme results from the previous questions are due to small sample sizes in a particular city, for a particular inspector, or in a particular time period. Look at the sample sizes in each of your groups. Do you think this is an explanation for the results you came to above?
+ANSWER: Similar to the bigger dataset with all types of facilities, there are varying sample sizes for each of these attributes. Small sample sizes can lead to an inaccurate view of what this data represents. For example, the average inspection score for each city was pretty high, but some cities only had a few restaurants inspected in it. Therefore, it isn't an accurate representation of the actual quality of that city's restaurants which may in fact be very poor. 
+
+```{r}
+#Finds number of restaurants grouped by city 
+restaurants_only |> 
+  group_by(CITY) |>
+  summarize(HSISID=length(HSISID)) |>
+  ungroup()
+
+#Finds number of restaurants grouped by inspector
+restaurants_only |> 
+  group_by(INSPECTOR) |>
+  summarize(HSISID=length(HSISID)) |>
+  ungroup()
+
+#Finds number of restaurants grouped by date 
+restaurants_only$DATE_MONTH = floor_date(restaurants_only$DATE_, unit="month")
+restaurants_only |> 
+  group_by(DATE_MONTH) |>
+  summarize(HSISID=length(HSISID)) |>
+  ungroup()
+```
+
+
+
+
+
+
+
